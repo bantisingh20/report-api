@@ -137,31 +137,32 @@ const Executionfunction = async (config) => {
     }
 
     // // --- ORDER BY clause ---
-    // let orderByClause = "";
-    // if (config.sortBy?.length > 0) {
-    //   const sortFields = config.sortBy.map((s) => `${s.column} ${s.order}`);
-    //   orderByClause = ` ORDER BY ${sortFields.join(", ")}`;
-    // }
-
-    // --- ORDER BY clause ---
     let orderByClause = "";
-
-    // Ensure groupBy columns are included in sortBy
-    if (config.groupBy?.length > 0) {
-      config.groupBy.forEach(groupObj => {
-        const groupField = groupObj.field;
-        const isInSort = config.sortBy?.some(s => s.column === groupField);
-        if (!isInSort) {
-          config.sortBy = config.sortBy || [];
-          config.sortBy.push({ column: groupField, order: "ASC" }); // Default order
-        }
-      });
-    }
-
     if (config.sortBy?.length > 0) {
-      const sortFields = config.sortBy.map(s => `${s.column} ${s.order}`);
+      const sortFields = config.sortBy.map((s) => `${s.column} ${s.order}`);
       orderByClause = ` ORDER BY ${sortFields.join(", ")}`;
     }
+
+    console.log(orderByClause);
+    // // --- ORDER BY clause ---
+    // let orderByClause = "";
+
+    // // Ensure groupBy columns are included in sortBy
+    // if (config.groupBy?.length > 0) {
+    //   config.groupBy.forEach(groupObj => {
+    //     const groupField = groupObj.field;
+    //     const isInSort = config.sortBy?.some(s => s.column === groupField);
+    //     if (!isInSort) {
+    //       config.sortBy = config.sortBy || [];
+    //       config.sortBy.push({ column: groupField, order: "ASC" }); // Default order
+    //     }
+    //   });
+    // }
+
+    // if (config.sortBy?.length > 0) {
+    //   const sortFields = config.sortBy.map(s => `${s.column} ${s.order}`);
+    //   orderByClause = ` ORDER BY ${sortFields.join(", ")}`;
+    // }
 
 
     // --- Count clause ---

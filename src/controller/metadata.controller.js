@@ -211,15 +211,14 @@ async function PreviewReport(req, res, next) {
     const selectedColumnSet = new Set(selectedcolumns);
     const groupFields = groupby.map(col => typeof col.field === "object" ? col.field.column_name : col.field);
     const missingInSelect = groupFields.filter(field => !selectedColumnSet.has(field));
-
-
-    if (missingInSelect.length > 0) {
+ 
+    if (missingInSelect.length > 0 && fieldtype.toLowerCase() === "summary") {
       return next({ status: 400, message: `Group by columns must be selected: ${missingInSelect.join(", ")}`, error: "Invalid group selection.", });
     }
 
     // groyup by col selected columns me nahi hai toh error msg return karna hai
     const badGroup = groupFields.filter((field) => !columnMap.has(field));
-    if (badGroup.length > 0) {
+    if (badGroup.length > 0 && fieldtype.toLowerCase() === "summary") {
       return next({ status: 400, message: `Invalid group columns: ${badGroup.map((c) => c.field).join(", ")}`, error: "Invalid group selection.", });
     }
 
