@@ -2,11 +2,11 @@
  require('dotenv').config();
 
 const pool = new Pool({
-  host: "localhost",
-  port: 5432,
-  user: "postgres",
-  password: "Setu@123",
-  database: "StoreManagement_v1"
+  host: PGHOST,
+  port: PGPORT,
+  user: PGUSER,
+  password: "Setu@123",  // chage here PGPASSWORDs
+  database: PGDATABASE
 }); 
  
 // direct connection 
