@@ -9,6 +9,7 @@ const pool = new Pool({
   database: "StoreManagement_v1"
 }); 
  
+// direct connection 
 // const pool = new Pool({
 //   connectionString: 'postgresql://postgres:SKqTcQtPohmCkonIcSGnyLaFWYzVZZie@crossover.proxy.rlwy.net:59877/railway',
 //   ssl: {
