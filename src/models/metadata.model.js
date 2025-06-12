@@ -108,16 +108,18 @@ const Executionfunction = async (config) => {
     let whereClause = "";
 
     if (config.filters?.length > 0) {
+
+       
       const filterClauses = config.filters
         .map((filter) => {
           // console.log('Processing filter:', filter);
-          const sqlOperator = getOperatorSymbol(filter.operator.toLowerCase());
+          const sqlOperator = filter.operator;// getOperatorSymbol(filter.operator.toLowerCase());
           if (!sqlOperator)
             throw new Error(`Unsupported operator: ${filter.operator}`);
           //const sqlOperator = operatorMap[filter.operator.toLowerCase()];
 
           // console.log(sqlOperator)
-          if (sqlOperator === "BETWEEN") {
+          if (sqlOperator === "between" || sqlOperator.toLowerCase() === "Between") {
             params.push(filter.valueFrom, filter.valueTo);
             return `${filter.field
               } BETWEEN $${paramIndex++} AND $${paramIndex++}`;

@@ -1,5 +1,5 @@
 /*
-SELECT generate_dynamic_sql(
+SELECT generate_dynamic_sql_data(
   '{
     "tables": ["categories","products"],
     "selection": ["categories.name", "products.name", "products.stock", "products.price", "products.description"],
@@ -30,8 +30,8 @@ SELECT generate_dynamic_sql(
 
 */ 
 
-CREATE OR REPLACE FUNCTION generate_dynamic_sql(config jsonb)
-RETURNS text AS $$
+CREATE OR REPLACE FUNCTION generate_dynamic_sql_data(config jsonb)
+RETURNS jsonb AS $$
 DECLARE
     tables TEXT[] := ARRAY(SELECT jsonb_array_elements_text(config->'tables'));
     selection TEXT[] := ARRAY(SELECT jsonb_array_elements_text(config->'selection'));
@@ -58,6 +58,9 @@ DECLARE
     sort jsonb;
     filter_clauses TEXT[] := '{}';
     order_clauses TEXT[] := '{}';
+
+	row RECORD;
+    result jsonb := '[]'::jsonb;
 BEGIN
     -- Build aliased SELECT
      select_sql := 'SELECT ' || alias_columns(selection) || ' FROM ' || base_table;
@@ -153,6 +156,13 @@ BEGIN
         final_sql := select_sql || join_sql || where_sql || order_sql;
     END IF;
 
-    RETURN final_sql;
+ -- Execute the final SQL and collect rows as JSON
+    FOR row IN EXECUTE final_sql LOOP
+        result := result || to_jsonb(row);
+    END LOOP;
+
+    RETURN result;
+	
+    --RETURN final_sql;
 END;
 $$ LANGUAGE plpgsql;
