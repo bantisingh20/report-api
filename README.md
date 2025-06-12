@@ -66,3 +66,18 @@ const pool = new Pool({
 A sample database is attached with this project. Please import it into your PostgreSQL setup.
 
 Make sure PostgreSQL is installed on your system. If not, refer to the config/db.js file for alternative remote configuration.
+
+
+
+
+report-api/
+├── api/
+│   └── index.js              <-- your serverless function file here
+├── src/
+│   ├── controller/
+│   ├── config/
+│   ├── middlewares/
+│   └── routes/
+├── package.json
+├── vercel.json
+├── .env
