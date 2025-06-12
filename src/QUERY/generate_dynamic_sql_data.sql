@@ -11,8 +11,8 @@ SELECT generate_dynamic_sql_data(
     { "column": "products.stock", "order": "DESC" } 
   ],
   "groupBy": [{"field": "categories.name"}, {"field": "products.stock"}],
-  "xyaxiws":[],
-  "xyaxis": [
+  "xyaxis":[],
+  "xyaxisw": [
     {
       "x": {
         "field": "categories.name",

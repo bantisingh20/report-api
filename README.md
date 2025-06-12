@@ -73,11 +73,13 @@ Make sure PostgreSQL is installed on your system. If not, refer to the config/db
 report-api/
 ├── api/
 │   └── index.js              <-- your serverless function file here
+│   └── ping.js   
 ├── src/
 │   ├── controller/
 │   ├── config/
 │   ├── middlewares/
 │   └── routes/
+│   └── index.js
 ├── package.json
 ├── vercel.json
 ├── .env
