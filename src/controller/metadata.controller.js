@@ -1,5 +1,5 @@
 const pool = require("../config/db.js");
-const { Executionfunction } = require("../models/metadata.model");
+const { Executionfunction } = require("../models/metadata.model.js");
 const { mapDbTypeToJsType } = require("../utils/Operator.utils.js");
 
 async function listTablesAndViews(req, res) {
