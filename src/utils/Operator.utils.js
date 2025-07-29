@@ -1,3 +1,14 @@
+
+const operatorMap = {
+  'equals': '=',
+  'not equals': '!=',
+  'greater than': '>',
+  'less than': '<',
+  'between': 'BETWEEN',
+  'contains': 'ILIKE' // Use 'LIKE' if not using PostgreSQL or want case-sensitive
+};
+
+
 async function mapDbTypeToJsType(dbType) {
   if (['integer', 'int', 'smallint', 'bigint', 'decimal', 'numeric', 'real', 'double precision'].includes(dbType)) {
     return 'number';
@@ -14,15 +25,6 @@ async function mapDbTypeToJsType(dbType) {
   return 'string'; // fallback
 }
 
-
-const operatorMap = {
-  'equals': '=',
-  'not equals': '!=',
-  'greater than': '>',
-  'less than': '<',
-  'between': 'BETWEEN',
-  'contains': 'ILIKE' // Use 'LIKE' if not using PostgreSQL or want case-sensitive
-};
 
 function getOperatorSymbol(operator) {
   return operatorMap[operator] || null;
