@@ -1,7 +1,7 @@
-const pool = require("../config/db.js");
+const pool = require("../config/database.js");
 const { getOperatorSymbol, extractLabel,} = require("../utils/Operator.utils.js");
-const { quoteField, buildFilterClause, buildOrderClause, buildPaginationClause, buildXYAggregation} = require("../utils/queryHelper");
-const { setQueryCache, getQueryCache } = require("../utils/queryCache");
+const { quoteField, buildFilterClause, buildOrderClause, buildPaginationClause, buildXYAggregation} = require("../utils/queryHelper.js");
+const { setQueryCache, getQueryCache } = require("../utils/queryCache.js");
 const objectHash = require("object-hash");
  
  const Executionfunction = async (config, isPagination = false) => {

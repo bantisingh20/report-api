@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const {  listTablesAndViews ,ListReport ,GetReportById ,CheckRelationAndListOfColumn ,PreviewReport ,SaveReportConfiguration} = require('../controller/metadata.controller');
-const { PaginatedReport } = require('../models/metadata.model');
+const {  listTablesAndViews ,ListReport ,GetReportById ,CheckRelationAndListOfColumn ,PreviewReport ,SaveReportConfiguration} = require('../controller/report.controller');
+const { PaginatedReport } = require('../service/report.service');
 
 router.get('/', (req, res) => {
   res.json({ message: 'Metadata API working!' });

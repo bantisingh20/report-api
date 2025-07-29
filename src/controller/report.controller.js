@@ -1,7 +1,7 @@
-const pool = require("../config/db.js");
+const pool = require("../config/database.js");
 const { Executionfunction, getPaginatedReports, getTotalReportCount ,getReportById, insertReportConfiguration,
-  updateReportConfiguration } = require("../models/metadata.model.js");
-const { FromResult, MessageType  } = require("../utils/api-response.util.js");
+  updateReportConfiguration } = require("../service/report.service.js");
+const { FromResult, MessageType  } = require("../middlewares/apiResponse.js");
 const { mapDbTypeToJsType } = require("../utils/Operator.utils.js");
 require('dotenv').config();
  
