@@ -113,6 +113,19 @@ const buildXYAggregation = (xyaxis, fromClause, whereClause, orderByClause) => {
   return { groupedSQL };
 };
 
+function getPaginationParams(req) {
+  const page = parseInt(req.query.page, 10) || 1;
+  const pageSize = parseInt(req.query.pageSize, 10) || 10;
+  const offset = (page - 1) * pageSize;
+  return { page, pageSize, offset };
+}
+
+function addSerialNumbers(data, offset) {
+  return data.map((item, index) => ({
+    ...item,
+    srNo: offset + index + 1,
+  }));
+}
 module.exports = {
   quoteField,
   extractLabel,
@@ -120,4 +133,6 @@ module.exports = {
   buildOrderClause,
   buildPaginationClause,
   buildXYAggregation,
+  getPaginationParams,
+  addSerialNumbers
 };

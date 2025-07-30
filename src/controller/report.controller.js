@@ -1,27 +1,30 @@
 const pool = require("../config/database.js");
-const { Executionfunction, getPaginatedReports, getTotalReportCount ,getReportById, insertReportConfiguration,
-  updateReportConfiguration } = require("../service/report.service.js");
-const { FromResult, MessageType  } = require("../middlewares/apiResponse.js");
+const { Executionfunction, getPaginatedReports, getTotalReportCount, getReportById, insertReportConfiguration,
+  updateReportConfiguration,
+  getTablesAndViews } = require("../service/report.service.js");
+const { FromResult, FromPaginatedResult, MessageType } = require("../middlewares/apiResponse.js");
 const { mapDbTypeToJsType } = require("../utils/Operator.utils.js");
+const { getPaginationParams, addSerialNumbers } = require("../utils/queryHelper.js");
+const { normalizeField, validateFieldtypeSelection, validateFilters, validateGroupAndSort } = require("../utils/validationUtils.js");
+
 require('dotenv').config();
- 
+
 
 async function ListReport(req, res) {
   try {
-    const page = parseInt(req.query.page, 10) || 1;
-    const pageSize = parseInt(req.query.pageSize, 10) || 10;
-    const offset = (page - 1) * pageSize;
 
-    const data = await getPaginatedReports(pageSize, offset);
-    const total = await getTotalReportCount();
-
+    const { page, pageSize, offset } = getPaginationParams(req);
+    let data = await getPaginatedReports(pageSize, offset);
+    const totalCount = await getTotalReportCount();
+    data = addSerialNumbers(data, offset);
     console.log(data);
-    return res.json(FromResult(MessageType.Success, '', data, total));
+    return res.json(FromPaginatedResult(MessageType.Success, '', data, page, pageSize, totalCount));
   } catch (error) {
+    console.log(error);
     return res.status(500).json(FromResult(MessageType.Error, error.message, [], 0));
   }
 }
- 
+
 async function GetReportById(req, res) {
   try {
     const reportId = req.params.id;
@@ -36,7 +39,7 @@ async function GetReportById(req, res) {
     res.status(500).json(FromResult(MessageType.Error, error.message, null, 0));
   }
 }
- 
+
 async function SaveReportConfiguration(req, res) {
   try {
     const {
@@ -90,28 +93,15 @@ async function SaveReportConfiguration(req, res) {
     return res.status(500).json(FromResult(MessageType.Error, err.message, null, 0));
   }
 }
- 
- async function listTablesAndViews(req, res) {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        table_schema AS schema,
-        table_name AS name,
-        table_type AS type
-      FROM information_schema.tables
-     -- WHERE 
-       -- table_schema IN ('ecommerce', 'logistics')
-      ORDER BY table_schema, table_type, table_name
-    `);
 
-    const data = result.rows.map((row) => ({
-      name: `${row.schema}.${row.name}`, // Format as schema.table_name
-      type: row.type === 'BASE TABLE' ? 'table' : 'view',
-    }));
+async function listTablesAndViews(req, res) {
+  try {
+    const data = await getTablesAndViews();
 
     res.json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    return res.json(FromResult(MessageType.Success, '', data));
+  } catch (error) {
+    return res.status(500).json(FromResult(MessageType.Error, error.message, [], 0));
   }
 }
 
@@ -199,9 +189,9 @@ async function CheckRelationAndListOfColumn(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
- 
 
-async function PreviewReport(req, res, next) {
+
+async function PreviewReportlod(req, res, next) {
   const {
     report_name,
     tableandview = [],
@@ -444,10 +434,293 @@ async function PreviewReport(req, res, next) {
 }
 
 
+async function PreviewReport(req, res, next) {
+  const {
+    report_name,
+    tableandview = [],
+    selectedcolumns = [],
+    xyaxis = [],
+    filters = [],
+    sortby = [],
+    groupby = [],
+    fieldtype,
+  } = req.body;
 
-function normalizeField(field) {
-  return typeof field === "object" && field.column_name ? field.column_name : field;
+  try {
+    // 1. Validate basic fieldtype requirements
+    const validationError = validateFieldtypeSelection(fieldtype, selectedcolumns, xyaxis);
+    if (validationError) {
+      return next({
+        status: 400,
+        message: validationError,
+        error: "Column validation failed.",
+      });
+    }
+
+    // 2. Validate table existence
+    const tableSchemas = tableandview.map(full => {
+      const [schema, table] = full.includes('.') ? full.split('.') : ['public', full];
+      return { schema, table };
+    });
+
+    if (tableSchemas.length === 0) {
+      return next({
+        status: 400,
+        message: "No tables or views specified.",
+        error: "Table validation failed."
+      });
+    }
+
+    const placeholders = tableSchemas.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(',');
+    const params = tableSchemas.flatMap(({ schema, table }) => [schema, table]);
+
+    const tableResult = await pool.query(
+      `SELECT table_schema, table_name FROM information_schema.tables WHERE (table_schema, table_name) IN (${placeholders})`,
+      params
+    );
+
+    const foundTables = new Set(tableResult.rows.map(row => `${row.table_schema}.${row.table_name}`));
+    const missingTables = tableandview.filter(t => !foundTables.has(t));
+    if (missingTables.length > 0) {
+      return next({
+        status: 400,
+        message: `The following tables/views do not exist: ${missingTables.join(", ")}`,
+        error: "Table validation failed.",
+      });
+    }
+
+    // 3. Validate foreign key relationships if multiple tables
+    if (tableandview.length > 1) {
+      const allTableNames = tableSchemas.map(({ schema, table }) => `"${schema}"."${table}"`);
+      const relResult = await pool.query(
+        `SELECT conrelid::regclass::text AS source_table, confrelid::regclass::text AS target_table
+         FROM pg_constraint
+         WHERE contype = 'f'
+         AND conrelid::regclass::text = ANY($1)
+         AND confrelid::regclass::text = ANY($1)`,
+        [allTableNames]
+      );
+
+      if (relResult.rows.length === 0) {
+        return next({
+          status: 400,
+          message: "The selected tables/views are not related to each other.",
+          error: "Table relationship validation failed.",
+        });
+      }
+    }
+
+    // 4. Fetch column metadata
+    const colResult = await pool.query(
+      `SELECT table_schema, table_name, column_name, data_type
+       FROM information_schema.columns
+       WHERE (table_schema, table_name) IN (${placeholders})`,
+      params
+    );
+
+    const columnMap = new Map();
+    colResult.rows.forEach(row => {
+      columnMap.set(`${row.table_schema}.${row.table_name}.${row.column_name}`, row.data_type);
+    });
+
+    // 5. Validate selected columns
+    const invalidColumns = selectedcolumns.filter(col => !columnMap.has(col));
+    if (invalidColumns.length > 0) {
+      return next({
+        status: 400,
+        message: `Invalid selected columns: ${invalidColumns.join(", ")}`,
+        error: "Invalid column selection.",
+      });
+    }
+
+    // 6. Validate filters
+    try {
+      await validateFilters(filters, columnMap);
+    } catch (filterError) {
+      return next({
+        status: 400,
+        message: filterError.message,
+        error: "Invalid filter.",
+      });
+    }
+
+    // 7. Validate groupBy and sortBy
+    try {
+      validateGroupAndSort(fieldtype, selectedcolumns, groupby, sortby, columnMap);
+    } catch (groupSortError) {
+      return next({
+        status: 400,
+        message: groupSortError.message,
+        error: "Invalid group/sort selection.",
+      });
+    }
+
+    // 8. Build config for execution
+    const config = {
+      tables: tableandview,
+      fieldtype,
+      selection: selectedcolumns,
+      filters: filters.map(f => ({
+        field: normalizeField(f.field),
+        operator: f.operator,
+        value: f.value,
+        valueFrom: f.valueFrom,
+        valueTo: f.valueTo,
+      })),
+      groupBy: groupby.map(g => ({
+        field: normalizeField(g.field),
+      })),
+      sortBy: sortby.map(col => ({
+        column: normalizeField(col.field),
+        order: col.direction,
+      })),
+      xyaxis: xyaxis.map(axis => ({
+        x: {
+          field: normalizeField(axis.xAxisField),
+          order: axis.xAxisDirection,
+          transformation: axis.xAxisTransformation || "raw",
+        },
+        y: {
+          field: normalizeField(axis.yAxisField),
+          order: axis.yAxisDirection,
+          aggregation: axis.yAxisAggregation || "count",
+        },
+      })),
+    };
+
+    // 9. Execute report with the config
+    const data = await Executionfunction(config);
+
+    res.json({ message: "Validation passed", data, chartData: null });
+
+  } catch (err) {
+    next(err);
+  }
 }
+
+ async function validatePreviewRequest(req, res, next) {
+  const {
+    report_name,
+    tableandview = [],
+    selectedcolumns = [],
+    xyaxis = [],
+    filters = [],
+    sortby = [],
+    groupby = [],
+    fieldtype,
+  } = req.body;
+
+  try {
+    const validationError = validateFieldtypeSelection(fieldtype, selectedcolumns, xyaxis);
+    if (validationError) {
+      return res.status(400).json({
+        message: validationError,
+        error: "Column validation failed",
+      });
+    }
+
+    const tableSchemas = tableandview.map(full => {
+      const [schema, table] = full.includes('.') ? full.split('.') : ['public', full];
+      return { schema, table };
+    });
+
+    const placeholders = tableSchemas.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(',');
+    const params = tableSchemas.flatMap(({ schema, table }) => [schema, table]);
+
+    const tableResult = await pool.query(
+      `SELECT table_schema, table_name FROM information_schema.tables WHERE (table_schema, table_name) IN (${placeholders})`,
+      params
+    );
+
+    const foundTables = new Set(tableResult.rows.map(row => `${row.table_schema}.${row.table_name}`));
+    const missingTables = tableandview.filter(t => !foundTables.has(t));
+    if (missingTables.length > 0) {
+      return res.status(400).json({
+        message: `Missing tables: ${missingTables.join(', ')}`,
+        error: "Invalid table selection",
+      });
+    }
+
+    if (tableandview.length > 1) {
+      const allTableNames = tableSchemas.map(({ schema, table }) => `"${schema}"."${table}"`);
+      const relResult = await pool.query(
+        `SELECT conrelid::regclass::text AS source_table, confrelid::regclass::text AS target_table
+         FROM pg_constraint
+         WHERE contype = 'f'
+         AND conrelid::regclass::text = ANY($1)
+         AND confrelid::regclass::text = ANY($1)`,
+        [allTableNames]
+      );
+      if (relResult.rows.length === 0) {
+        return res.status(400).json({
+          message: `The selected tables/views are not related.`,
+          error: "No foreign key relationship",
+        });
+      }
+    }
+
+    const colResult = await pool.query(
+      `SELECT table_schema, table_name, column_name, data_type
+       FROM information_schema.columns
+       WHERE (table_schema, table_name) IN (${placeholders})`,
+      params
+    );
+
+    const columnMap = new Map();
+    colResult.rows.forEach(row => {
+      columnMap.set(`${row.table_schema}.${row.table_name}.${row.column_name}`, row.data_type);
+    });
+
+    const invalidColumns = selectedcolumns.filter(col => !columnMap.has(col));
+    if (invalidColumns.length > 0) {
+      return res.status(400).json({
+        message: `Invalid selected columns: ${invalidColumns.join(', ')}`,
+        error: "Invalid columns",
+      });
+    }
+
+    await validateFilters(filters, columnMap);
+    validateGroupAndSort(fieldtype, selectedcolumns, groupby, sortby, columnMap);
+
+    // ✅ Prepare config and attach to request for next handler
+    req.reportConfig = {
+      tables: tableandview,
+      fieldtype,
+      selection: selectedcolumns,
+      filters: filters.map(f => ({
+        field: normalizeField(f.field),
+        operator: f.operator,
+        value: f.value,
+        valueFrom: f.valueFrom,
+        valueTo: f.valueTo,
+      })),
+      groupBy: groupby.map(g => ({
+        field: normalizeField(g.field),
+      })),
+      sortBy: sortby.map(col => ({
+        column: normalizeField(col.field),
+        order: col.direction,
+      })),
+      xyaxis: xyaxis.map(axis => ({
+        x: {
+          field: normalizeField(axis.xAxisField),
+          order: axis.xAxisDirection,
+          transformation: axis.xAxisTransformation || "raw",
+        },
+        y: {
+          field: normalizeField(axis.yAxisField),
+          order: axis.yAxisDirection,
+          aggregation: axis.yAxisAggregation || "count",
+        },
+      })),
+    };
+
+    next();
+  } catch (err) {
+    return res.status(400).json({ message: err.message, error: "Validation error" });
+  }
+}
+
 module.exports = {
   listTablesAndViews,
   CheckRelationAndListOfColumn,
