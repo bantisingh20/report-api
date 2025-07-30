@@ -339,7 +339,11 @@ const objectHash = require("object-hash");
   // --- Filter, Sort, Pagination Setup
   const { whereClause, params } = buildFilterClause(config.filters || []);
   const orderByClause = buildOrderClause(config.sortBy || []);
-  const groupByList = config.groupBy?.map((g) => g.field.replace(/\./g, " - ")) || [];
+   // const groupByList = config.groupBy?.map((g) => g.field.replace(/\./g, " - ")) || [];
+  const groupByList = config.groupBy?.map((g) => {
+  const parts = g.field.split('.');
+  return parts[parts.length - 1]; // gets the last segment
+}) || [];
   const isGrouped = groupByList.length > 0;
 
   // --- Count & XY Aggregation Mode
