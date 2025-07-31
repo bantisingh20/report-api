@@ -1,6 +1,6 @@
 const pool = require("../config/database.js");
 const { getOperatorSymbol, extractLabel,} = require("../utils/Operator.utils.js");
-const { quoteField, buildFilterClause, buildOrderClause, buildPaginationClause, buildXYAggregation} = require("../utils/queryHelper.js");
+const { quoteField, buildFilterClause, buildOrderClause, buildPaginationClause, buildXYAggregation, getPart} = require("../utils/queryHelper.js");
 const { setQueryCache, getQueryCache } = require("../utils/queryCache.js");
 const objectHash = require("object-hash");
 
@@ -332,18 +332,19 @@ const objectHash = require("object-hash");
   if (config.selection?.length > 0) {
     selection = config.selection.map((col) => {
       const alias = col.split(".").pop();
-      return `${quoteField(col)} AS "${alias}"`;
+      return `${quoteField(col)} AS "${getPart(col,1)} - ${getPart(col,2)}"`;
     }).join(", ");
   }
-
+  
   // --- Filter, Sort, Pagination Setup
   const { whereClause, params } = buildFilterClause(config.filters || []);
   const orderByClause = buildOrderClause(config.sortBy || []);
-   // const groupByList = config.groupBy?.map((g) => g.field.replace(/\./g, " - ")) || [];
+ // const groupByList = config.groupBy?.map((g) => g.field.replace(/\./g, " - ")) || [];
   const groupByList = config.groupBy?.map((g) => {
   const parts = g.field.split('.');
   return parts[parts.length - 1]; // gets the last segment
 }) || [];
+
   const isGrouped = groupByList.length > 0;
 
   // --- Count & XY Aggregation Mode
@@ -577,6 +578,7 @@ async function getTablesAndViews() {
   return result.rows.map(row => ({
     name: `${row.schema}.${row.name}`, // schema.table_name
     type: row.type === 'BASE TABLE' ? 'table' : 'view',
+    label: `${row.name}`
   }));
 }
 
