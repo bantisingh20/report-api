@@ -126,6 +126,13 @@ function addSerialNumbers(data, offset) {
     srNo: offset + index + 1,
   }));
 }
+
+function getPart(col, index = 'last') {
+  const parts = col.split(".");
+  if (index === 'last') return parts[parts.length - 1];
+  return parts[index] !== undefined ? parts[index] : null;
+}
+
 module.exports = {
   quoteField,
   extractLabel,
@@ -134,5 +141,5 @@ module.exports = {
   buildPaginationClause,
   buildXYAggregation,
   getPaginationParams,
-  addSerialNumbers
+  addSerialNumbers,getPart
 };
