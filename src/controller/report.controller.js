@@ -105,6 +105,7 @@ async function listTablesAndViews(req, res) {
   }
 }
 
+//for both table and col rel
 async function CheckRelationAndListOfColumn(req, res) {
   try {
     const { selectedTables = [] } = req.body;
@@ -149,6 +150,7 @@ async function CheckRelationAndListOfColumn(req, res) {
       relatedTables.add(`${row.target_schema}.${row.target_table}`);
     });
 
+    console.log(relatedTables)
     // Step 4: Column metadata query for all related tables
     const relatedPairs = Array.from(relatedTables).map((full) => {
       const [schema, table] = full.split(".");
@@ -189,6 +191,143 @@ async function CheckRelationAndListOfColumn(req, res) {
     res.status(500).json({ error: err.message });
   }
 }
+
+// for table realtion only
+async function getRelatedTables(req, res) {
+  try {
+    const { selectedTables = [] } = req.body;
+
+    const tableSchemaPairs = selectedTables.map(full => {
+      const [schema, table] = full.split(".");
+      return { schema, table };
+    });
+
+    const fkQuery = `
+      SELECT
+        tc.table_schema AS source_schema,
+        tc.table_name AS source_table,
+        ccu.table_schema AS target_schema,
+        ccu.table_name AS target_table,
+        tc.constraint_type,
+        'BASE TABLE' AS type -- Fake type for example, replace if needed
+      FROM 
+        information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+      WHERE 
+        tc.constraint_type = 'FOREIGN KEY' AND
+        (
+          (tc.table_schema, tc.table_name) IN (${tableSchemaPairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}) OR
+          (ccu.table_schema, ccu.table_name) IN (${tableSchemaPairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")})
+        )
+    `;
+
+    const paramValues = tableSchemaPairs.flatMap(({ schema, table }) => [schema, table]);
+    const { rows: fkRows } = await pool.query(fkQuery, paramValues);
+
+    const relatedSet = new Set(selectedTables);
+    fkRows.forEach(row => {
+      relatedSet.add(`${row.source_schema}.${row.source_table}`);
+      relatedSet.add(`${row.target_schema}.${row.target_table}`);
+    });
+
+    const relatedTables = Array.from(relatedSet).map(full => {
+      const [schema, name] = full.split(".");
+      return {
+        name: full,
+        label: name,
+        type: 'table' // Default type, or derive from `fkRows` if needed
+      };
+    });
+
+    //res.json({ relatedTables });
+    res.json(FromResult(MessageType.Success, '', relatedTables, 0));
+  } catch (error) {
+    res.status(500).json(FromResult(MessageType.Error, error.message, null, 0));
+   // res.status(500).json({ error: err.message });
+  }
+}
+
+//for col realation
+async function getColumnsAndRelations(req, res) {
+  try {
+    const { selectedTables = [] } = req.body;
+
+    const tableSchemaPairs = selectedTables.map(full => {
+      const [schema, table] = full.split(".");
+      return { schema, table };
+    });
+
+    const fkQuery = `
+      SELECT
+        tc.table_schema AS source_schema,
+        tc.table_name AS source_table,
+        kcu.column_name AS source_column,
+        ccu.table_schema AS target_schema,
+        ccu.table_name AS target_table,
+        ccu.column_name AS target_column
+      FROM 
+        information_schema.table_constraints AS tc
+        JOIN information_schema.key_column_usage AS kcu
+          ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+        JOIN information_schema.constraint_column_usage AS ccu
+          ON ccu.constraint_name = tc.constraint_name AND ccu.table_schema = tc.table_schema
+      WHERE 
+        tc.constraint_type = 'FOREIGN KEY' AND
+        (
+          (tc.table_schema, tc.table_name) IN (${tableSchemaPairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")}) OR
+          (ccu.table_schema, ccu.table_name) IN (${tableSchemaPairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")})
+        )
+    `;
+
+    const paramValues = tableSchemaPairs.flatMap(({ schema, table }) => [schema, table]);
+    const { rows: fkRows } = await pool.query(fkQuery, paramValues);
+
+    const relatedSet = new Set(selectedTables);
+    fkRows.forEach(row => {
+      relatedSet.add(`${row.source_schema}.${row.source_table}`);
+      relatedSet.add(`${row.target_schema}.${row.target_table}`);
+    });
+
+    const relatedPairs = Array.from(relatedSet).map(full => {
+      const [schema, table] = full.split(".");
+      return { schema, table };
+    });
+
+    const columnQuery = `
+      SELECT table_schema, table_name, column_name, data_type
+      FROM information_schema.columns
+      WHERE (table_schema, table_name) IN (${relatedPairs.map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`).join(", ")})
+    `;
+
+    const columnParams = relatedPairs.flatMap(({ schema, table }) => [schema, table]);
+    const { rows: columnRows } = await pool.query(columnQuery, columnParams);
+
+    const columnsByTable = {};
+    columnRows.forEach(row => {
+      const key = `${row.table_schema}.${row.table_name}`;
+      if (!columnsByTable[key]) {
+        columnsByTable[key] = [];
+      }
+      columnsByTable[key].push({
+        column_name: row.column_name,
+        data_type: row.data_type,
+      });
+    });
+
+    const relations = fkRows.map(row => ({
+      from: `${row.source_schema}.${row.source_table}.${row.source_column}`,
+      to: `${row.target_schema}.${row.target_table}.${row.target_column}`
+    }));
+
+    res.json({ columnsByTable, relations });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 
 
 async function PreviewReportlod(req, res, next) {
@@ -727,5 +866,5 @@ module.exports = {
   PreviewReport,
   ListReport,
   GetReportById,
-  SaveReportConfiguration,
+  SaveReportConfiguration,getRelatedTables
 };
