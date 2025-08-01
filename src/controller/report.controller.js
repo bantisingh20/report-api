@@ -98,7 +98,7 @@ async function listTablesAndViews(req, res) {
   try {
     const data = await getTablesAndViews();
 
-    res.json(data);
+    // res.json(data);
     return res.json(FromResult(MessageType.Success, '', data));
   } catch (error) {
     return res.status(500).json(FromResult(MessageType.Error, error.message, [], 0));
